@@ -1,163 +1,70 @@
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
-import random
-from docopt import docopt
 
 class Lattice:
     def __init__(self, size):
         self.size = size
-        self.grid = np.zeros((size, size))
-        self.i, self.j = size // 2, size // 2
-        self.grid[self.i, self.j] = 1
-        self.counter = 1
-        self.sequence = []
+        self.grid = np.zeros((size, size), dtype=int)
+        self.start = (size // 2, size // 2)
+        self.directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]  # East, South, West, North
+
+    def initialize_saw(self):
+        self.grid[self.start] = 1
+        self.current_pos = self.start
+        self.steps = [self.current_pos]
+
+    def is_valid_move(self, move):
+        new_pos = tuple(np.add(self.current_pos, move))
+        return 0 <= new_pos[0] < self.size and 0 <= new_pos[1] < self.size and self.grid[new_pos] == 0
+
+    def move(self, move):
+        self.current_pos = tuple(np.add(self.current_pos, move))
+        self.grid[self.current_pos] = len(self.steps) + 1
+        self.steps.append(self.current_pos)
 
     def get_choices(self):
-        choices = []
-        if self.i-1 >= 0 and self.grid[self.i-1, self.j] == 0:
-            choices.append("North")
-        if self.j+1 < self.grid.shape[1] and self.grid[self.i, self.j+1] == 0:
-            choices.append("East")
-        if self.i+1 < self.grid.shape[0] and self.grid[self.i+1, self.j] == 0:
-            choices.append("South")
-        if self.j-1 >= 0 and self.grid[self.i, self.j-1] == 0:
-            choices.append("West")
+        choices = [direction for direction in self.directions if self.is_valid_move(direction)]
         return choices
 
-    def grow(self, lower_bound):
+    def generate_saw(self):
         while True:
-            self.grid = np.zeros((self.size, self.size))
-            self.i, self.j = self.size // 2, self.size // 2
-            self.counter = 1
-            self.grid[self.i, self.j] = self.counter
-            self.sequence = []
             choices = self.get_choices()
-
-            while len(choices) > 0:
-                self.counter += 1
-                move = random.choice(choices)
-                self.sequence.append(move)
-                if move == "North":
-                    self.i -= 1
-                elif move == "East":
-                    self.j += 1
-                elif move == "South":
-                    self.i += 1
-                elif move == "West":
-                    self.j -= 1
-                self.grid[self.i, self.j] = self.counter
-                choices = self.get_choices()
-
-            if len(self.sequence) >= lower_bound:
+            if not choices:
                 break
+            move = random.choice(choices)
+            self.move(move)
 
-        self.sequence.append("Stay")
-        return self.sequence, self.grid
-       
-    def update(self, frame, mat, verbose=False):
-        move = self.sequence[frame]
-        if move != "Stay":
-            if verbose:
-                print(move, end=" ")
-            if move == "North":
-                self.i -= 1
-            elif move == "East":
-                self.j += 1
-            elif move == "South":
-                self.i += 1
-            elif move == "West":
-                self.j -= 1
-            self.grid[self.i, self.j] = self.counter
-        else:
-            self.counter -= 1
+    def visualize_animation(self):
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.set_title(f"Self-Avoiding Walk on a {self.size}x{self.size} Lattice")
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.grid(True)
 
-        mat.set_data(self.grid)
-        return [mat]
+        mat = ax.matshow(self.grid, cmap=plt.get_cmap('viridis'), vmin=0, vmax=len(self.steps))
+
+        def update(frame):
+            if frame < len(self.steps):
+                mat.set_data(np.where(self.grid == frame + 1, frame + 1, 0))
+            else:
+                mat.set_data(self.grid)
+            return [mat]
+
+        ani = animation.FuncAnimation(fig, update, frames=len(self.steps) + 10, blit=True, repeat=False)
+        plt.show()
 
 class SquareLattice(Lattice):
     def __init__(self, size):
         super().__init__(size)
-    
-    def visualize(self):
-        # 特殊的方形晶格绘制逻辑
-        pass
-
-class HoneycombLattice(Lattice):
-    def __init__(self, size):
-        super().__init__(size)
-
-    def get_choices(self):
-        # 特殊的蜂巢晶格移动逻辑
-        choices = super().get_choices()
-        # 扩展蜂巢格特有的选择规则
-        # 这里仅提供示例，具体规则尚需根据蜂巢格特点调整
-        if (self.i + self.j) % 2 == 0:  # 示例规则展示
-            if self.i-1 >= 0 and self.j-1 >= 0 and self.grid[self.i-1, self.j-1] == 0:
-                choices.append("Northwest")
-            if self.i+1 < self.grid.shape[0] and self.j+1 < self.grid.shape[1] and self.grid[self.i+1, self.j+1] == 0:
-                choices.append("Southeast")
-        else:
-            if self.i-1 >= 0 and self.j+1 < self.grid.shape[1] and self.grid[self.i-1, self.j+1] == 0:
-                choices.append("Northeast")
-            if self.i+1 < self.grid.shape[0] and self.j-1 >= 0 and self.grid[self.i+1, self.j-1] == 0:
-                choices.append("Southwest")
-        return choices
-
-    def visualize(self):
-        # 特殊的蜂巢晶格绘制逻辑
-        pass
 
 def main():
-    """Self-Avoiding Paths Visualizer
-
-    Usage:
-      selfavoidance.py [options]
-      selfavoidance.py (-h | --help)
-      selfavoidance.py --version
-
-    Options:
-      -l --lower <int>     Sets a lower bound on the length of the random walk.
-                           [default: 0]
-      -n --size <int>      Width/Height of the lattice containing the random walk.
-                           [default: 51]
-      -m --ms <int>        Milliseconds between frames in the animation.
-                           [default: 50]
-      -c --cmap <string>   Colormap to use.
-                           [default: jet]
-      -t --type <string>   Type of lattice (e.g. square, honeycomb).
-                           [default: square]
-      -h --help            Show this screen.
-      -v --verbose         Show runtime info.
-      --version            Show version.
-    """
-    docstring = main.__doc__
-    if docstring is None:
-        raise ValueError("Docstring is missing")
-    arguments = docopt(docstring, version="Self-Avoiding Paths Visualizer 1.1")
-    lower_bound = int(arguments["--lower"])
-    n = int(arguments["--size"])
-    ms = int(arguments["--ms"])
-    cmap = arguments["--cmap"]
-    lattice_type = arguments["--type"].lower()
-    verbose = arguments.get("--verbose", False)
-    
-    if lattice_type == "honeycomb":
-        lattice = HoneycombLattice(n)
-    else:
-        lattice = SquareLattice(n)
-    
-    sequence, grid = lattice.grow(lower_bound)
-    
-    fig, ax = plt.subplots()
-    mat = ax.matshow(grid, cmap=plt.get_cmap(cmap), vmin=0, vmax=len(sequence))
-    
-    if verbose:
-        print(f"Number of moves: {len(sequence) - 1}")
-        print(f"Sequence of moves: ", end="")
-
-    ani = animation.FuncAnimation(fig, lattice.update, fargs=(mat, verbose), interval=ms, frames=len(sequence), blit=True, repeat=False)
-    plt.show()
+    size = 51  # Default size of the lattice
+    lattice = SquareLattice(size)
+    lattice.initialize_saw()
+    lattice.generate_saw()
+    lattice.visualize_animation()
 
 if __name__ == "__main__":
     main()
